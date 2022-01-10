@@ -799,6 +799,7 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
 
   #if EXTRA_PROBING > 0
     float probes[TOTAL_PROBING];
+    float in_order[TOTAL_PROBING];
   #endif
 
   #if TOTAL_PROBING > 2
@@ -823,6 +824,7 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
       TERN_(MEASURE_BACKLASH_WHEN_PROBING, backlash.measure_with_probe());
 
       const float z = DIFF_TERN(HAS_DELTA_SENSORLESS_PROBING, current_position.z, largest_sensorless_adj);
+      in_order[p] = z;
 
       #if EXTRA_PROBING > 0
         // Insert Z measurement into probes[]. Keep it sorted ascending.
@@ -848,6 +850,24 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
         ) do_z_raise(Z_CLEARANCE_MULTI_PROBE);
       #endif
     }
+    /*
+    SERIAL_ECHOPGM("Probe X:", current_position.x,
+      " Y:", current_position.y, " Z: ");
+    for(uint8_t p = 0; p < TOTAL_PROBING; ++p)
+    {
+        if(p)
+            SERIAL_ECHOPGM(", ");
+        SERIAL_ECHO_F(in_order[p], 6);
+    }
+    SERIAL_ECHOPGM(" d ");
+    for(uint8_t p = 1; p < TOTAL_PROBING; ++p)
+    {
+        if(p > 1)
+            SERIAL_ECHOPGM(", ");
+        SERIAL_ECHO_F(in_order[p] - in_order[0], 6);
+    }
+    SERIAL_ECHOLNPGM("");
+    */
 
   #if TOTAL_PROBING > 2
 
@@ -860,8 +880,36 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
       // Remove values farthest from the median
       uint8_t min_avg_idx = 0, max_avg_idx = TOTAL_PROBING - 1;
       for (uint8_t i = EXTRA_PROBING; i--;)
-        if (ABS(probes[max_avg_idx] - median) > ABS(probes[min_avg_idx] - median))
-          max_avg_idx--; else min_avg_idx++;
+      {
+        const float max_diff = ABS(probes[max_avg_idx] - median);
+        const float min_diff = ABS(probes[min_avg_idx] - median);
+        float toss;
+        if (max_diff > min_diff)
+        {
+          toss = max_diff;
+          max_avg_idx--;
+        }
+        else
+        {
+            toss = min_diff;
+            min_avg_idx++;
+        }
+        if(toss > .05)
+            SERIAL_ECHOPGM("Warning likely bad ");
+        else
+            SERIAL_ECHOPGM("Debug ");
+        SERIAL_ECHOPGM("probe difference: ");
+        SERIAL_ECHO_F(toss, 6);
+        SERIAL_ECHOPGM(" X:", current_position.x,
+          " Y:", current_position.y, " Z: ");
+        for(uint8_t p = 0; p < TOTAL_PROBING; ++p)
+        {
+            if(p)
+                SERIAL_ECHOPGM(", ");
+            SERIAL_ECHO_F(in_order[p], 6);
+        }
+        SERIAL_ECHOLNPGM("");
+      }
 
       // Return the average value of all remaining probes.
       LOOP_S_LE_N(i, min_avg_idx, max_avg_idx)
