@@ -156,12 +156,12 @@ void LevelingBilinear::extrapolate_unprobed_bed_level() {
 void LevelingBilinear::print_leveling_grid(const bed_mesh_t* _z_values/*=nullptr*/) {
   // print internal grid(s) or just the one passed as a parameter
   SERIAL_ECHOLNPGM("Bilinear Leveling Grid:");
-  print_2d_array(GRID_MAX_POINTS_X, GRID_MAX_POINTS_Y, 3, _z_values ? *_z_values[0] : z_values[0]);
+  print_2d_array(GRID_MAX_POINTS_X, GRID_MAX_POINTS_Y, 6, _z_values ? *_z_values[0] : z_values[0]);
 
   #if ENABLED(ABL_BILINEAR_SUBDIVISION)
     if (!_z_values) {
       SERIAL_ECHOLNPGM("Subdivided with CATMULL ROM Leveling Grid:");
-      print_2d_array(ABL_GRID_POINTS_VIRT_X, ABL_GRID_POINTS_VIRT_Y, 5, z_values_virt[0]);
+      print_2d_array(ABL_GRID_POINTS_VIRT_X, ABL_GRID_POINTS_VIRT_Y, 6, z_values_virt[0]);
     }
   #endif
 }
