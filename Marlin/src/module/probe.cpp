@@ -769,7 +769,7 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
   };
 
   // Double-probing does a fast probe followed by a slow probe
-  #if TOTAL_PROBING == 2
+  #if TOTAL_PROBING == 2 || defined(PROBING_ADAPTIVE_OVER)
 
     // Attempt to tare the probe
     if (TERN0(PROBE_TARE, tare())) return NAN;
@@ -799,7 +799,100 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
 
   #if EXTRA_PROBING > 0
     float probes[TOTAL_PROBING];
-    float in_order[TOTAL_PROBING];
+    // debugging eliminate
+    float in_order[MULTIPLE_PROBING + EXTRA_PROBING + PROBING_ADAPTIVE_RETRY_LIMIT];
+  #endif
+
+  #ifdef PROBING_ADAPTIVE_OVER
+  uint8_t retry = 0;
+  float worst = 0;
+  probes[0] = first_probe_z;
+  in_order[0] = first_probe_z;
+  uint8_t probes_next = 1;
+  uint8_t in_order_next = 1;
+  // the first probe, p == 0, has already happened
+  for(uint8_t p = 1; p < MULTIPLE_PROBING + PROBING_ADAPTIVE_RETRY_LIMIT; ++p)
+  {
+    // If the probe won't tare, return
+    if (TERN0(PROBE_TARE, tare())) return true;
+
+    // Probe downward slowly to find the bed
+    if (try_to_probe(PSTR("SLOW"), MMM_TO_MMS(Z_PROBE_FEEDRATE_SLOW),
+                     Z_CLEARANCE_MULTI_PROBE) ) return NAN;
+
+    TERN_(MEASURE_BACKLASH_WHEN_PROBING, backlash.measure_with_probe());
+
+    const float z = current_position.z;
+    in_order[in_order_next++] = z;
+    // Insert Z measurement into probes[]. Keep it sorted ascending.
+    LOOP_LE_N(i, probes_next) {                            // Iterate the saved Zs to insert the new Z
+      if (i == probes_next || probes[i] > z) {                              // Last index or new Z is smaller than this Z
+        for (int8_t m = probes_next; --m >= i;) probes[m + 1] = probes[m];  // Shift items down after the insertion point
+        probes[i] = z;                                            // Insert the new Z measurement
+        break;                                                    // Only one to insert. Done!
+      }
+    }
+
+    // once there are three eliminate the worst
+    if(probes_next == 3)
+    {
+      const float median = probes[1];
+      const float max_diff = ABS(probes[2] - median);
+      const float min_diff = ABS(probes[0] - median);
+      float toss;
+      if (max_diff > min_diff)
+      {
+        toss = max_diff;
+        // shift to eliminate the first one
+        probes[0] = probes[1];
+        probes[1] = probes[2];
+      }
+      else
+      {
+        toss = min_diff;
+      }
+      probes_next = 2;
+      if(worst < toss)
+        worst = toss;
+    }
+
+    // compare the two left
+    const float difference = ABS(probes[0] - probes[1]);
+    if(worst < difference)
+      worst = difference;
+
+    if(difference < PROBING_ADAPTIVE_OVER)
+      break;
+
+    if(++retry > PROBING_ADAPTIVE_RETRY_LIMIT)
+      break;
+
+    // Small Z raise when probing again
+    do_blocking_move_to_z(z + Z_CLEARANCE_MULTI_PROBE, z_probe_fast_mm_s);
+  }
+
+  if(retry)
+    SERIAL_ECHOPGM("Warning likely bad probe, difference: ");
+  else
+    SERIAL_ECHOPGM("Debug probe, difference: ");
+  SERIAL_ECHO_F(worst, 6);
+  SERIAL_ECHOPGM("  X:", current_position.x,
+    " Y:", current_position.y, " Z: ");
+  for(uint8_t p = 0; p < in_order_next; ++p)
+  {
+      if(p)
+          SERIAL_ECHOPGM(", ");
+      SERIAL_ECHO_F(in_order[p], 6);
+  }
+  SERIAL_ECHOLNPGM("");
+  if(retry > PROBING_ADAPTIVE_RETRY_LIMIT)
+  {
+    SERIAL_ECHOLNPGM("Error probe results unreliable aborting.");
+    return NAN;
+  }
+
+  // average the two best probe values
+  return (probes[0] + probes[1]) * RECIPROCAL(2);
   #endif
 
   #if TOTAL_PROBING > 2
