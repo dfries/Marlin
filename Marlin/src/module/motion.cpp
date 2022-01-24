@@ -2138,7 +2138,9 @@ void prepare_line_to_destination() {
 
     // Determine if a homing bump will be done and the bumps distance
     // When homing Z with probe respect probe clearance
-    const bool use_probe_bump = TERN0(HOMING_Z_WITH_PROBE, axis == Z_AXIS && home_bump_mm(axis));
+    // disable bump when doing adaptive, it will do its own probing
+    const bool use_probe_bump = TERN(PROBING_ADAPTIVE_RETRY_LIMIT, false,
+        TERN0(HOMING_Z_WITH_PROBE, axis == Z_AXIS && home_bump_mm(axis)));
     const float bump = axis_home_dir * (
       use_probe_bump ? _MAX(TERN0(HOMING_Z_WITH_PROBE, Z_CLEARANCE_BETWEEN_PROBES), home_bump_mm(axis)) : home_bump_mm(axis)
     );
@@ -2374,8 +2376,19 @@ void prepare_line_to_destination() {
 
     #else // CARTESIAN / CORE / MARKFORGED_XY / MARKFORGED_YX
 
+        SERIAL_ECHOPGM("prior to set at home, current_position.z ");
+        SERIAL_ECHO_F(current_position.z, 6);
+        SERIAL_ECHOLNPGM("");
       set_axis_is_at_home(axis);
+        SERIAL_ECHOPGM("prior to sync, current_position.z ");
+        SERIAL_ECHO_F(current_position.z, 6);
+        SERIAL_ECHOLNPGM("");
       sync_plan_position();
+        SERIAL_ECHOPGM("after sync, current_position.z ");
+        SERIAL_ECHO_F(current_position.z, 6);
+        SERIAL_ECHOPGM(" destination.z ");
+        SERIAL_ECHO_F(destination.z, 6);
+        SERIAL_ECHOLNPGM("");
 
       destination[axis] = current_position[axis];
 
@@ -2409,6 +2422,78 @@ void prepare_line_to_destination() {
     #endif
 
     if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("<<< homeaxis(", AS_CHAR(AXIS_CHAR(axis)), ")");
+
+    #ifdef PROBING_ADAPTIVE_RETRY_LIMIT
+    if(axis == Z_AXIS)
+    {
+        SERIAL_ECHOLNPGM("calling probe.probe_at_point");
+        const xyz_pos_t raised_xyz = current_position;
+
+        // PROBE_PT_NONE to get the current position, raise later for the second
+        // measurement set.
+        float z0 = probe.probe_at_point(current_position.x + probe.offset_xy.x,
+            current_position.y + probe.offset_xy.y, PROBE_PT_NONE);
+        float current_z0 = current_position.z;
+
+        do_blocking_move_to(raised_xyz, MMM_TO_MMS(Z_PROBE_FEEDRATE_FAST));
+
+        float z1 = probe.probe_at_point(current_position.x + probe.offset_xy.x,
+            current_position.y + probe.offset_xy.y, PROBE_PT_NONE);
+        float current_z1 = current_position.z;
+
+        // after getting two sets of probes (of which adaptive will verify
+        // each set
+        const float z_set_delta = z0 - z1;
+        if(ABS(z_set_delta) > PROBING_ADAPTIVE_OVER)
+        {
+            set_axis_unhomed(Z_AXIS);
+            set_axis_untrusted(Z_AXIS);
+            SERIAL_ECHOPGM("Error probe home probe sets differ by too much ");
+            SERIAL_ECHO_F(z_set_delta, 6);
+            SERIAL_ECHOLNPGM(" try again?");
+            // TODO How to best abort when the probing looks bad?
+        }
+        else
+        {
+          // Adjust by the average of what the probe values returned (which
+          // is relative to the Z home 0).
+          xyz_pos_t home_xyz = current_position;
+          const float z_average = (z0 + z1) * .5;
+          home_xyz.z = z_average - probe.offset.z;
+          SERIAL_ECHOPGM("after double probe current_position.z ");
+          SERIAL_ECHO_F(current_position.z, 6);
+          SERIAL_ECHOPGM(" move to ");
+          SERIAL_ECHO_F(home_xyz.z, 6);
+          SERIAL_ECHOLNPGM("");
+
+          do_blocking_move_to(home_xyz, MMM_TO_MMS(Z_PROBE_FEEDRATE_SLOW));
+
+          set_axis_is_at_home(axis);
+
+          SERIAL_ECHOPGM("prior to sync, current_position.z ");
+          SERIAL_ECHO_F(current_position.z, 6);
+          SERIAL_ECHOLNPGM("");
+
+          sync_plan_position();
+          destination[axis] = current_position[axis];
+
+          SERIAL_ECHOPGM("run_z_probe() z0 ");
+          SERIAL_ECHO_F(z0, 6);
+          SERIAL_ECHOPGM(" current_z0 ");
+          SERIAL_ECHO_F(current_z0, 6);
+          SERIAL_ECHOPGM(" z1 ");
+          SERIAL_ECHO_F(z1, 6);
+          SERIAL_ECHOPGM(" current_z1 ");
+          SERIAL_ECHO_F(current_z1, 6);
+          SERIAL_ECHOPGM(" destination.z ");
+          SERIAL_ECHO_F(destination.z, 6);
+          SERIAL_ECHOPGM(" adjust Z by ");
+          SERIAL_ECHO_F(z_average, 6);
+          SERIAL_ECHOLNPGM("");
+        }
+
+    }
+    #endif
 
   } // homeaxis()
 
