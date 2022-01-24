@@ -2158,6 +2158,43 @@ void prepare_line_to_destination() {
       if (axis == Z_AXIS && !bltouch.high_speed_mode) bltouch.stow(); // Intermediate STOW (in LOW SPEED MODE)
     #endif
 
+    #ifdef PROBING_ADAPTIVE_RETRY_LIMIT
+    if(axis == Z_AXIS) {
+        // Would prefer just doing probe.probe_at_point but the initial probe
+        // if Z hasn't been homed is 10mm not the entire range.  Let the
+        // above find the bed, then do adaptive.
+        set_axis_is_at_home(axis);
+        sync_plan_position();
+        destination[axis] = current_position[axis];
+
+        // Move it away from the bed
+        do_blocking_move_to_z(current_position.z + Z_CLEARANCE_BETWEEN_PROBES,
+          MMM_TO_MMS(Z_PROBE_FEEDRATE_FAST));
+
+        // PROBE_PT_NONE, this needs to stay at the home point for
+        // set_axis_is_at_home.
+        const float z0 = probe.probe_at_point(
+            current_position.x + probe.offset_xy.x,
+            current_position.y + probe.offset_xy.y, PROBE_PT_NONE, 1);
+
+        if (isnan(z0)) {
+            set_axis_unhomed(Z_AXIS);
+            set_axis_untrusted(Z_AXIS);
+            SERIAL_ECHOPGM("Error home Z failed");
+            Probe::probe_error_stop();
+        }
+        else {
+            // Adjust by the average of what the probe values returned (which
+            // is relative to the Z home 0).
+            float home_z = z0 - probe.offset.z;
+
+            // The returned value will be an average, move to that location.
+            do_blocking_move_to_z(home_z, MMM_TO_MMS(Z_PROBE_FEEDRATE_SLOW));
+        }
+    }
+    else // skip bump
+    #endif
+
     // If a second homing move is configured...
     if (bump) {
       // Move away from the endstop by the axis HOMING_BUMP_MM
