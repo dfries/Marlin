@@ -88,8 +88,14 @@ void GcodeSuite::G30() {
     const ProbePtRaise raise_after = parser.boolval('E', true) ? PROBE_PT_STOW : PROBE_PT_NONE;
 
     TERN_(HAS_PTC, ptc.set_enabled(!parser.seen('C') || parser.value_bool()));
+    // "sanity_check" will fail with "Triggered early." if the measured point
+    // is not close to Home Z point.  Reasonable when probing the bed for auto
+    // ed level, but not when trying to measure a model to say get the model
+    // height to resume a failed print, or general measuring.
+    // Disable sanity_check and return the measured value as G30 is presumed to
+    // be interactive let it decide what is an eroneous value.
     const float measured_z = probe.probe_at_point(pos, raise_after, 1,
-      probe_relative);
+      probe_relative, /*sanity_check*/ false);
     TERN_(HAS_PTC, ptc.set_enabled(true));
     if (!isnan(measured_z)) {
       SERIAL_ECHOLNPGM("Bed X: ", pos.asLogical().x, " Y: ", pos.asLogical().y, " Z: ", measured_z);
