@@ -901,6 +901,15 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
       SERIAL_ECHO_F(in_order[p], 6);
   }
   SERIAL_ECHOLNPGM("");
+
+  // Checking the elimiate the worst
+  SERIAL_ECHOPGM("Samples averaged: ");
+  SERIAL_ECHO_F(probes[0], 6);
+  SERIAL_ECHOPGM(" ");
+  SERIAL_ECHO_F(probes[1], 6);
+  // don't print probes[2] which was discarded and isn't averaged
+  SERIAL_ECHOLNPGM("");
+
   if(retry > PROBING_ADAPTIVE_RETRY_LIMIT)
   {
     SERIAL_ECHOLNPGM("Error probe results unreliable aborting.");
