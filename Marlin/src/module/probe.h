@@ -336,6 +336,8 @@ public:
   #endif
 
   #if HAS_QUIET_PROBING
+    // If true, disable any requested heaters, fans, etc for probing,
+    // false, enable them again.
     static void set_probing_paused(const bool p);
   #endif
 
