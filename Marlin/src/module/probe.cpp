@@ -798,12 +798,26 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
   #endif
 
   #if EXTRA_PROBING > 0
-    float probes[TOTAL_PROBING];
+    float probes[3];
     // debugging eliminate
     float in_order[MULTIPLE_PROBING + EXTRA_PROBING + PROBING_ADAPTIVE_RETRY_LIMIT];
   #endif
 
   #ifdef PROBING_ADAPTIVE_OVER
+  /**
+   * General algorithm, take two probes (one completed already), if they
+   * differ by less than PROBING_ADAPTIVE_OVER average and return.  Otherwise
+   * take another sample, sort them, throw out the first or last sample
+   * that differs the most.  Repeat until two samples pass or the maximum
+   * retry is reached.
+   * This is expected to handle the occasional bad probe well, or even a series
+   * of bad probes provided the bad probes aren't consistently returning nearly
+   * the same value.  Another failure case is if the first two probes are
+   * bad, don't agree with each other, but are closer than the following
+   * good probe values.
+   * TODO Would it help if for the last two retry probes the set is thrown out
+   * in case there are two close together bad probes?
+   */
   uint8_t retry = 0;
   float worst = 0;
   probes[0] = first_probe_z;
@@ -832,24 +846,26 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
         break;                                                    // Only one to insert. Done!
       }
     }
+    ++probes_next;
 
     // once there are three eliminate the worst
     if(probes_next == 3)
     {
       const float median = probes[1];
-      const float max_diff = ABS(probes[2] - median);
-      const float min_diff = ABS(probes[0] - median);
+      const float max_diff = probes[2] - median;
+      const float min_diff = median - probes[0];
       float toss;
       if (max_diff > min_diff)
       {
         toss = max_diff;
-        // shift to eliminate the first one
-        probes[0] = probes[1];
-        probes[1] = probes[2];
+        // probe_next goes down drops the last entry
       }
       else
       {
         toss = min_diff;
+        // shift to eliminate the first one
+        probes[0] = probes[1];
+        probes[1] = probes[2];
       }
       probes_next = 2;
       if(worst < toss)
@@ -857,7 +873,7 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
     }
 
     // compare the two left
-    const float difference = ABS(probes[0] - probes[1]);
+    const float difference = probes[1] - probes[0];
     if(worst < difference)
       worst = difference;
 
@@ -881,7 +897,7 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
   for(uint8_t p = 0; p < in_order_next; ++p)
   {
       if(p)
-          SERIAL_ECHOPGM(", ");
+          SERIAL_ECHOPGM(" ");
       SERIAL_ECHO_F(in_order[p], 6);
   }
   SERIAL_ECHOLNPGM("");
