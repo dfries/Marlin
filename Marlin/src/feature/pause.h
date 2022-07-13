@@ -87,6 +87,11 @@ bool pause_print(
   DXC_PARAMS                                                  // Dual-X-Carriage extruder index
 );
 
+// Will pause and way for user input to continue.
+// Note, this calls thermalManager.reset_hotend_idle_timer(e) to set the timeout
+// before the heater is turned off.  This must be rest or the heater will
+// turn off after a while.  load_filament() expects to identify if it has
+// turned off and it will reset the idle timer.
 void wait_for_confirmation(
   const bool      is_reload=false,                            // Reload Filament? (otherwise Resume Print)
   const int8_t    max_beep_count=0                            // Beep alert for attention

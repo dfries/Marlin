@@ -403,6 +403,10 @@ void remember_feedrate_scaling_off();
 void restore_feedrate_and_scaling();
 
 #if HAS_Z_AXIS
+  /**
+   * Move to zclear within the limits of current_position.z and Z_MAX_POS.
+   * If lower_allowed it will not apply the current_position.z limit.
+   */
   void do_z_clearance(const_float_t zclear, const bool lower_allowed=false);
 #else
   inline void do_z_clearance(float, bool=false) {}
