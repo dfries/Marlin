@@ -224,6 +224,7 @@ bool load_filament(const_float_t slow_load_length/*=0*/, const_float_t fast_load
     }
   }
 
+  SERIAL_ECHOLNPGM("PAUSE_MESSAGE_LOAD"); // debugging
   if (show_lcd) ui.pause_show_message(PAUSE_MESSAGE_LOAD, mode);
 
   #if ENABLED(DUAL_X_CARRIAGE)
@@ -258,6 +259,7 @@ bool load_filament(const_float_t slow_load_length/*=0*/, const_float_t fast_load
   #endif
 
   #if ENABLED(ADVANCED_PAUSE_CONTINUOUS_PURGE)
+    SERIAL_ECHOLNPGM("CONTINUOUS_PURGE"); // debugging
 
     if (show_lcd) ui.pause_show_message(PAUSE_MESSAGE_PURGE);
 
@@ -273,12 +275,14 @@ bool load_filament(const_float_t slow_load_length/*=0*/, const_float_t fast_load
     do {
       if (purge_length > 0) {
         // "Wait for filament purge"
+        SERIAL_ECHOLNPGM("PAUSE_MESSAGE_PURGE"); // debugging
         if (show_lcd) ui.pause_show_message(PAUSE_MESSAGE_PURGE);
 
         // Extrude filament to get into hotend
         unscaled_e_move(purge_length, ADVANCED_PAUSE_PURGE_FEEDRATE);
       }
 
+      SERIAL_ECHOLNPGM("Purge more prompt"); // debugging
       TERN_(HOST_PROMPT_SUPPORT, hostui.filament_load_prompt()); // Initiate another host prompt.
 
       #if M600_PURGE_MORE_RESUMABLE
@@ -296,7 +300,12 @@ bool load_filament(const_float_t slow_load_length/*=0*/, const_float_t fast_load
       #endif
 
       // Keep looping if "Purge More" was selected
+    if(pause_menu_response == PAUSE_RESPONSE_EXTRUDE_MORE)
+      SERIAL_ECHOLNPGM("response was pruge more");
+    else
+      SERIAL_ECHOLNPGM("response was to not purge and continue");
     } while (TERN0(M600_PURGE_MORE_RESUMABLE, pause_menu_response == PAUSE_RESPONSE_EXTRUDE_MORE));
+    SERIAL_ECHOLNPGM("After purge"); // debugging
 
   #endif
 
@@ -413,6 +422,28 @@ bool pause_print(const_float_t retract, const xyz_pos_t &park_point, const bool 
       hostui.pause();
     #endif
   #endif
+
+  SERIAL_ECHOLNPGM("pause_print start");
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("heater ", e,
+      " timeout_ms ", thermalManager.heater_idle[e].timeout_ms,
+      " timed_out ", thermalManager.heater_idle[e].timed_out,
+      //"preheating", thermalManager.is_preheating(e),
+      " degHotend ", thermalManager.degHotend(e),
+      #if ENABLED(SHOW_TEMP_ADC_VALUES)
+      " rawHotendTemp ", thermalManager.rawHotendTemp(e),
+      #endif
+      " degTargetHotend ", thermalManager.degTargetHotend(e),
+      "\n");
+  }
+  thermalManager.print_heater_states(active_extruder);
+  /*
+  Temperature::RunawayIndex e0_state_index = thermalManagerRunawayIndex(H_E0);
+  SERIAL_ECHOPGM(
+    "state", thermalManager.tr_state_machine[e0_state_index].state,
+    "running_temp",
+      thermalManager.tr_state_machine[e0_state_index].running_temp);
+      */
 
   TERN_(HOST_PROMPT_SUPPORT, hostui.prompt_open(PROMPT_INFO, F("Pause"), FPSTR(DISMISS_STR)));
 
@@ -618,6 +649,12 @@ void resume_print(const_float_t slow_load_length/*=0*/, const_float_t fast_load_
   //*/
 
   if (!did_pause_print) return;
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("start resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
 
   // Re-enable the heaters if they timed out
   bool nozzle_timed_out = false;
@@ -625,18 +662,43 @@ void resume_print(const_float_t slow_load_length/*=0*/, const_float_t fast_load_
     nozzle_timed_out |= thermalManager.heater_idle[e].timed_out;
     thermalManager.reset_hotend_idle_timer(e);
   }
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("start resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
 
   if (targetTemp > thermalManager.degTargetHotend(active_extruder))
     thermalManager.setTargetHotend(targetTemp, active_extruder);
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("start resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
 
   // Load the new filament
   load_filament(slow_load_length, fast_load_length, purge_length, max_beep_count, true, nozzle_timed_out, PAUSE_MODE_SAME DXC_PASS);
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("start resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
 
   if (targetTemp > 0) {
     thermalManager.setTargetHotend(targetTemp, active_extruder);
     thermalManager.wait_for_hotend(active_extruder, false);
   }
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("start resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
 
+  SERIAL_ECHOLNPGM("PAUSE_MESSAGE_RESUME"); // debugging
   ui.pause_show_message(PAUSE_MESSAGE_RESUME);
 
   // Check Temperature before moving hotend
@@ -683,6 +745,7 @@ void resume_print(const_float_t slow_load_length/*=0*/, const_float_t fast_load_
   // Set extruder to saved position
   planner.set_e_position_mm((destination.e = current_position.e = resume_position.e));
 
+  SERIAL_ECHOLNPGM("PAUSE_MESSAGE_STATUS"); // debugging
   ui.pause_show_message(PAUSE_MESSAGE_STATUS);
 
   #ifdef ACTION_ON_RESUMED

@@ -149,9 +149,14 @@ void GcodeSuite::M600() {
     #endif
   );
 
+  SERIAL_ECHOPGM("Before pause_print, unload_length ");
+  SERIAL_ECHO_F(unload_length, 1);
+  SERIAL_ECHOLNPGM("");
   if (pause_print(retract, park_point, true, unload_length DXC_PASS)) {
     if (standardM600) {
+      SERIAL_ECHOLNPGM("before wait_for_confirmation identify change complete");
       wait_for_confirmation(true, beep_count DXC_PASS);
+      SERIAL_ECHOLNPGM(" after wait_for_confirmation");
       resume_print(
         FILAMENT_CHANGE_SLOW_LOAD_LENGTH,
         ABS(parser.axisunitsval('L', E_AXIS, fc_settings[active_extruder].load_length)),
