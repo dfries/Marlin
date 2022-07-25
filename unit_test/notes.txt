@@ -1,0 +1,13 @@
+make && ./unit_test_probe .30 .35 .010 .013 .011 .014 .013
+Warning likely bad probe, difference: 0.340000  X:0 Y:0 Z: 0.300000 0.350000 0.010000 0.013000 0.011000 0.014000
+run_z_probe result 0.012
+
+make && ./unit_test_probe .30 .35 .020 .013 .011 .014 .013
+Warning likely bad probe, difference: 0.339000  X:0 Y:0 Z: 0.300000 0.350000 0.020000 0.013000 0.011000 0.014000
+run_z_probe result 0.0145
+
+make && ./unit_test_probe .30 .35 -.020 .013 .011 .014 .013
+Warning likely bad probe, difference: 0.370000  X:0 Y:0 Z: 0.300000 0.350000 -0.020000 0.013000 0.011000 0.014000
+Error probe results unreliable aborting.
+
+( -.020 + -.013 + .011 + .014 + .013 ) / 5
