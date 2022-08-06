@@ -312,6 +312,12 @@ bool load_filament(const_float_t slow_load_length/*=0*/, const_float_t fast_load
   #endif
 
   TERN_(MPCTEMP, MPC::e_paused = false);
+/*
+  #if M600_PURGE_MORE_RESUMABLE == 0
+    SERIAL_ECHOLNPGM("After purge confirm to continue."); // debugging
+    wait_for_confirmation(false, 5);
+  #endif
+*/
 
   TERN_(HOST_PROMPT_SUPPORT, hostui.prompt_end());
 
