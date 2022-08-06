@@ -621,6 +621,22 @@ void wait_for_confirmation(const bool is_reload/*=false*/, const int8_t max_beep
     idle_no_sleep();
   }
   TERN_(DUAL_X_CARRIAGE, set_duplication_enabled(saved_ext_dup_mode, saved_ext));
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("wait_for_confirmation timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      " reset\n");
+    // likely keep this reset, it started the timeout, it should stop it
+    // when nothing else is expected to, except resume_print is reading
+    // timed_out and a reset here would mess with it.
+    /*
+    thermalManager.reset_hotend_idle_timer(e);
+    SERIAL_ECHOPGM("wait_for_confirmation timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+    */
+  }
 }
 
 /**
