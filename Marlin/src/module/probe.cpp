@@ -804,28 +804,34 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
   #endif
 
   #ifdef PROBING_ADAPTIVE_OVER
-  /**
-   * General algorithm, take two probes (one completed already), if they
-   * differ by less than PROBING_ADAPTIVE_OVER average and return.  Otherwise
-   * take another sample, sort them, throw out the first or last sample
-   * that differs the most.  Repeat until two samples pass or the maximum
-   * retry is reached.
-   * This is expected to handle the occasional bad probe well, or even a series
-   * of bad probes provided the bad probes aren't consistently returning nearly
-   * the same value.  Another failure case is if the first two probes are
-   * bad, don't agree with each other, but are closer than the following
-   * good probe values.
-   * TODO Would it help if for the last two retry probes the set is thrown out
-   * in case there are two close together bad probes?
-   */
-  uint8_t retry = 0;
-  float worst = 0;
+  uint8_t bad = 0;
+  float average = NAN;
   probes[0] = first_probe_z;
-  in_order[0] = first_probe_z;
   uint8_t probes_next = 1;
-  uint8_t in_order_next = 1;
+  bool again = true;
+  // Keep retrying probing until the retry limit is reached or there are two
+  // more good values than bad values.  If it passes all good values are
+  // averaged.  This allows stopping at two good values which matching the
+  // historic two probe values then average, while both detecting and retrying
+  // inconsistent results.  If there is one bad value it will probe four times,
+  // for two, six.  Good and bad values are determined by the Z difference from
+  // the configuration value PROBING_ADAPTIVE_OVER.  This is written assuming
+  // bad values will be inconsistent with the only matches being among good
+  // values, or close enough value to a good value as to not matter.  The more
+  // bad values seen, the more the number of good values required to verify that
+  // the correct values are identified as good or bad.
+  //
+  // Loop retries left:
+  //  probe
+  //   for each probe point
+  //    compare to each other probe
+  //    count the number within the limit
+  //    keep sum of good values
+  //    if good - bad > 2
+  //      average good; done
+
   // the first probe, p == 0, has already happened
-  for(uint8_t p = 1; p < MULTIPLE_PROBING + PROBING_ADAPTIVE_RETRY_LIMIT; ++p)
+  while(probes_next < MULTIPLE_PROBING + PROBING_ADAPTIVE_RETRY_LIMIT)
   {
     // If the probe won't tare, return
     if (TERN0(PROBE_TARE, tare())) return true;
@@ -837,87 +843,75 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
     TERN_(MEASURE_BACKLASH_WHEN_PROBING, backlash.measure_with_probe());
 
     const float z = current_position.z;
-    in_order[in_order_next++] = z;
-    // Insert Z measurement into probes[]. Keep it sorted ascending.
-    LOOP_LE_N(i, probes_next) {                            // Iterate the saved Zs to insert the new Z
-      if (i == probes_next || probes[i] > z) {                              // Last index or new Z is smaller than this Z
-        for (int8_t m = probes_next; --m >= i;) probes[m + 1] = probes[m];  // Shift items down after the insertion point
-        probes[i] = z;                                            // Insert the new Z measurement
-        break;                                                    // Only one to insert. Done!
-      }
-    }
-    ++probes_next;
+    probes[probes_next++] = z;
 
-    // once there are three eliminate the worst
-    if(probes_next == 3)
+    // For each entry compared to every other entry (and itself, which always
+    // passes, to keep it simple).  Keeping a running of the sum for that set
+    // of good values.
+    for(uint8_t start = 0; start < probes_next; ++start)
     {
-      const float median = probes[1];
-      const float max_diff = probes[2] - median;
-      const float min_diff = median - probes[0];
-      float toss;
-      if (max_diff > min_diff)
+      float sum = 0;
+      uint8_t good = 0;
+      for(uint8_t i = 0; i < probes_next; ++i)
       {
-        toss = max_diff;
-        // probe_next goes down drops the last entry
+        if(probes[start] == probes[i] ||
+          fabsf(probes[start] - probes[i]) < PROBING_ADAPTIVE_OVER)
+        {
+          sum += probes[i];
+          ++good;
+        }
       }
-      else
+      bad = probes_next - good;
+      if(good - bad >= 2)
       {
-        toss = min_diff;
-        // shift to eliminate the first one
-        probes[0] = probes[1];
-        probes[1] = probes[2];
+        again = false;
+        average = sum * RECIPROCAL(good);
+        break;
       }
-      probes_next = 2;
-      if(worst < toss)
-        worst = toss;
     }
-
-    // compare the two left
-    const float difference = probes[1] - probes[0];
-    if(worst < difference)
-      worst = difference;
-
-    if(difference < PROBING_ADAPTIVE_OVER)
-      break;
-
-    if(++retry > PROBING_ADAPTIVE_RETRY_LIMIT)
-      break;
 
     // Small Z raise when probing again
-    do_blocking_move_to_z(z + Z_CLEARANCE_MULTI_PROBE, z_probe_fast_mm_s);
+    if(again)
+      do_z_raise(Z_CLEARANCE_MULTI_PROBE);
+    else
+      break;
   }
 
-  if(retry)
+  float minimum, maximum;
+  minimum = maximum = probes[0];
+  for(uint8_t i = 0; i < probes_next; ++i)
+  {
+    float v = probes[i];
+    if(minimum > v)
+      minimum = v;
+    else if(maximum < v)
+      maximum = v;
+  }
+  float worst = maximum - minimum;;
+
+  if(bad)
     SERIAL_ECHOPGM("Warning likely bad probe, difference: ");
   else
     SERIAL_ECHOPGM("Debug probe, difference: ");
   SERIAL_ECHO_F(worst, 6);
   SERIAL_ECHOPGM("  X:", current_position.x,
     " Y:", current_position.y, " Z: ");
-  for(uint8_t p = 0; p < in_order_next; ++p)
+  for(uint8_t p = 0; p < probes_next; ++p)
   {
       if(p)
           SERIAL_ECHOPGM(" ");
-      SERIAL_ECHO_F(in_order[p], 6);
+      SERIAL_ECHO_F(probes[p], 6);
   }
   SERIAL_ECHOLNPGM("");
 
-  // Checking the elimiate the worst
-  SERIAL_ECHOPGM("Samples averaged: ");
-  SERIAL_ECHO_F(probes[0], 6);
-  SERIAL_ECHOPGM(" ");
-  SERIAL_ECHO_F(probes[1], 6);
-  // don't print probes[2] which was discarded and isn't averaged
-  SERIAL_ECHOLNPGM("");
-
-  if(retry > PROBING_ADAPTIVE_RETRY_LIMIT)
+  if(again)
   {
     SERIAL_ECHOLNPGM("Error probe results unreliable aborting.");
     return NAN;
   }
 
   // average the two best probe values
-  return (probes[0] + probes[1]) * RECIPROCAL(2);
+  return average;
   #endif
 
   #if TOTAL_PROBING > 2
