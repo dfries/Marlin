@@ -742,6 +742,43 @@ void resume_print(const_float_t slow_load_length/*=0*/, const_float_t fast_load_
   // Retract to prevent oozing
   unscaled_e_move(-(PAUSE_PARK_RETRACT_LENGTH), feedRate_t(PAUSE_PARK_RETRACT_FEEDRATE));
 
+  // LCD vs firmare mismatch or something going wrong with purge prompt,
+  // prompt to allow the user to clean off the purge filament before
+  // continuing to move to the model and print
+  SERIAL_ECHOLNPGM("Extra wait to continue prompt");
+  wait_for_confirmation(true, max_beep_count DXC_PASS);
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("before reset resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+    thermalManager.reset_hotend_idle_timer(e);
+    SERIAL_ECHOPGM("after reset resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
+  if (targetTemp > 0) {
+    thermalManager.setTargetHotend(targetTemp, active_extruder);
+    thermalManager.wait_for_hotend(active_extruder, false);
+  }
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("start resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
+  // Check Temperature after waiting for user before continuing
+  ensure_safe_temperature(DISABLED(BELTPRINTER));
+  // END extra continue
+
+  HOTEND_LOOP() {
+    thermalManager.reset_hotend_idle_timer(e);
+    SERIAL_ECHOPGM("start resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
   if (!axes_should_home()) {
     // Move XY back to saved position
     destination.set(resume_position.x, resume_position.y, current_position.z, current_position.e);
