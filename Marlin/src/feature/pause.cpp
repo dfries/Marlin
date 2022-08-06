@@ -850,6 +850,26 @@ void resume_print(const_float_t slow_load_length/*=0*/, const_float_t fast_load_
 
   ui.reset_status();
   ui.return_to_status();
+
+  SERIAL_ECHOLNPGM("resume_print end");
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("heater ", e,
+      " timeout_ms ", thermalManager.heater_idle[e].timeout_ms,
+      " timed_out ", thermalManager.heater_idle[e].timed_out,
+      //"preheating", thermalManager.is_preheating(e),
+      " degHotend ", thermalManager.degHotend(e),
+      #if ENABLED(SHOW_TEMP_ADC_VALUES)
+      " rawHotendTemp ", thermalManager.rawHotendTemp(e),
+      #endif
+      " degTargetHotend ", thermalManager.degTargetHotend(e),
+      "\n");
+  }
+  HOTEND_LOOP() {
+    thermalManager.reset_hotend_idle_timer(e);
+    SERIAL_ECHOPGM("returning resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      "\n");
+  }
 }
 
 #endif // ADVANCED_PAUSE_FEATURE
