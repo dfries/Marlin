@@ -727,6 +727,17 @@ void resume_print(const_float_t slow_load_length/*=0*/, const_float_t fast_load_
 
   // Check Temperature before moving hotend
   ensure_safe_temperature(DISABLED(BELTPRINTER));
+  HOTEND_LOOP() {
+    SERIAL_ECHOPGM("before reset_hotend_idle_timer ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+    thermalManager.reset_hotend_idle_timer(e);
+    SERIAL_ECHOPGM("start resume_print timeout_ms ",
+      thermalManager.heater_idle[e].timeout_ms,
+      " line ", __LINE__,
+      "\n");
+  }
 
   // Retract to prevent oozing
   unscaled_e_move(-(PAUSE_PARK_RETRACT_LENGTH), feedRate_t(PAUSE_PARK_RETRACT_FEEDRATE));
