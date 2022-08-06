@@ -165,6 +165,10 @@ void GcodeSuite::M600() {
         parser.celsiusval('R')
         DXC_PASS
       );
+      SERIAL_ECHOLNPGM(" after resume_print");
+      #if EITHER(HAS_LCD_MENU, DWIN_CREALITY_LCD_ENHANCED)
+        ui.clear_lcd();
+      #endif
     }
     else {
       #if ENABLED(MMU2_MENUS)
