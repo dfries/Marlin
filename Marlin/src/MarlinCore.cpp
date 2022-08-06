@@ -458,6 +458,7 @@ inline void manage_inactivity(const bool no_stepper_sleep=false) {
           TERN_(DISABLE_IDLE_E, stepper.disable_e_steppers());
 
           TERN_(AUTO_BED_LEVELING_UBL, bedlevel.steppers_were_disabled());
+          SERIAL_ECHOLNPGM("Disabling steppers due to inactivity.");
         }
       }
       else
