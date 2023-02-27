@@ -1,0 +1,1 @@
+../../Configurations.git/config/examples/Creality/Ender-6/Configuration_adv.h
