@@ -222,7 +222,8 @@ typedef int16_t celsius_t;
 typedef float celsius_float_t;
 
 //
-// On AVR pointers are only 2 bytes so use 'const float &' for 'const float'
+// On AVR pointers are only 2 bytes so save memory and pass by reference
+// 'const float &' instead of by value 'const float'
 //
 #ifdef __AVR__
   typedef const float & const_float_t;
