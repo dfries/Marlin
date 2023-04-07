@@ -3205,6 +3205,21 @@
   #if ENABLED(BLTOUCH) && !defined(BLTOUCH_DELAY)
     #define BLTOUCH_DELAY 500
   #endif
+  #ifndef Z_PROBE_FEEDRATE_RAISE
+    #define Z_PROBE_FEEDRATE_RAISE Z_PROBE_FEEDRATE_FAST
+  #endif
+  #if ENABLED(BLTOUCH)
+    #if ENABLED(BLTOUCH_HS_MODE)
+      #if !defined(Z_CLEARANCE_BLTOUCH_HS) || Z_CLEARANCE_BLTOUCH_HS <= 0
+        // High speed mode moves with the probe deployed, this is to avoid
+        // dragging the probe after raising the probe to nozzle offset.
+        #warning "BLTOUCH_HS_MODE with a positive Z_CLEARANCE_BLTOUCH_HS will use the full probe stroke."
+      #endif
+    #endif
+    #if !defined(BLTOUCH_DELAY)
+      #define BLTOUCH_DELAY 500
+    #endif
+  #endif
 #endif
 
 // Define a starting height for measuring manual probe points
