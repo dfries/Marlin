@@ -75,6 +75,8 @@ void GcodeSuite::G30() {
   // movement since it is already at the current location.
   const bool probe_relative = seenX || seenY;
 
+  float starting_z = current_position.z;
+
   if (probe.can_reach(pos)) {
     // Disable leveling so the planner won't mess with us
     TERN_(HAS_LEVELING, set_bed_leveling_enabled(false));
@@ -112,8 +114,13 @@ void GcodeSuite::G30() {
 
     restore_feedrate_and_scaling();
 
-    if (raise_after == PROBE_PT_STOW)
+    if (raise_after == PROBE_PT_STOW) {
       probe.move_z_after_probing();
+    } else {
+      // PROBE_PT_NONE leaves it at the point the probe touched, raise back up
+      // to the starting point to give some clearance.
+      do_z_clearance(starting_z);
+    }
 
     report_current_position();
   }
