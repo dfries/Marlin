@@ -32,6 +32,7 @@
 
 #include "../libs/buzzer.h"
 #include "motion.h"
+#include "planner.h"
 #include "temperature.h"
 #include "endstops.h"
 
@@ -947,7 +948,32 @@ float Probe::probe_at_point(const_float_t rx, const_float_t ry, const ProbePtRai
   if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM(" point");
 
   // Move the probe to the starting XYZ
-  do_blocking_move_to(npos, feedRate_t(XY_PROBE_FEEDRATE_MM_S));
+  #if ENABLED(BLTOUCH)
+  if (bltouch.high_speed_mode &&
+    npos.z > current_position.z + Z_CLEARANCE_BLTOUCH_HS) {
+    // the time to move the longer of required X or Y distance
+    const float htime = _MAX(fabs(npos.x - current_position.x),
+      fabs(npos.y - current_position.y)) / XY_PROBE_FEEDRATE_MM_S;
+    // How much can Z travel in that time, that is distance while diagonal.
+    const float z_diagonal = htime * MMM_TO_MMS(Z_PROBE_FEEDRATE_RAISE);
+    // Go straight up by the minimum high speed probe clearance, plus any
+    // amount that doesn't slow down the XY move.  Better to go straight up
+    // if it is going to take the same amount of time.
+    current_position.z = _MAX(current_position.z + Z_CLEARANCE_BLTOUCH_HS,
+      npos.z - z_diagonal);
+    line_to_current_position(MMM_TO_MMS(Z_PROBE_FEEDRATE_RAISE));
+    // Go diagonally to the requested probe point.  do_blocking_move_to will
+    // raise Z then do the XY movement, which takes longer, but has less
+    // chance of the probe running into something.  This could be helpful in
+    // any probing mode, but only enabling in high speed mode because there's
+    // expected to be some risk for speed.
+    current_position = npos;
+    line_to_current_position(feedRate_t(XY_PROBE_FEEDRATE_MM_S));
+    planner.synchronize();
+  }
+  else
+  #endif
+    do_blocking_move_to(npos, feedRate_t(XY_PROBE_FEEDRATE_MM_S));
 
   #if ENABLED(BLTOUCH)
     // Now at the safe_z if it is still triggered it may be in an alarm
