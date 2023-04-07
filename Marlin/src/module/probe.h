@@ -354,6 +354,9 @@ public:
 
 private:
   static bool probe_down_to_z(const_float_t z, const_feedRate_t fr_mm_s);
+  // add probe & hotend offset to z_raise and return the new value
+  static float offset_z_raise(const float z_raise);
+  // raise from current Z by probe & hotend offset + z_raise
   static void do_z_raise(const float z_raise);
   static float run_z_probe(const bool sanity_check=true);
 };
