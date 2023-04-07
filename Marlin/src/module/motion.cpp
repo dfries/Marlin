@@ -796,7 +796,8 @@ void do_blocking_move_to_x(const_float_t rx, const_feedRate_t fr_mm_s/*=0.0*/) {
     if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("do_z_clearance(", zclear, ", ", lower_allowed, ")");
     const float zdest = _MIN(zclear, Z_MAX_POS);
     if (zdest == current_position.z || (!lower_allowed && zdest < current_position.z)) return;
-    do_blocking_move_to_z(zdest, TERN(HAS_BED_PROBE, z_probe_fast_mm_s, homing_feedrate(Z_AXIS)));
+    do_blocking_move_to_z(zdest,
+      TERN(HAS_BED_PROBE, z_probe_feedrate_raise_mms, homing_feedrate(Z_AXIS)));
   }
 #endif
 
