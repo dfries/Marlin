@@ -59,6 +59,10 @@
 #define DEBUG_OUT ENABLED(DEBUG_LEVELING_FEATURE)
 #include "../../../core/debug_out.h"
 
+#if ENABLED(BLTOUCH)
+  #include "../../../feature/bltouch.h"
+#endif
+
 #if ABL_USES_GRID
   #if ENABLED(PROBE_Y_FIRST)
     #define PR_OUTER_VAR  abl.meshCount.x
@@ -656,7 +660,10 @@ G29_TYPE GcodeSuite::G29() {
 
   #else // !PROBE_MANUALLY
   {
-    const ProbePtRaise raise_after = parser.boolval('E') ? PROBE_PT_STOW : PROBE_PT_RAISE;
+    const ProbePtRaise raise_after = parser.boolval('E') ? PROBE_PT_STOW :
+      // PROBE_PT_NONE for high speed mode to let probe_at_point handle the
+      // raise before the probe.
+      TERN0(BLTOUCH, bltouch.high_speed_mode) ? PROBE_PT_NONE : PROBE_PT_RAISE;
 
     abl.measured_z = 0;
 
