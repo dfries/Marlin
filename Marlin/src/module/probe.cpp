@@ -726,15 +726,34 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
 
   const float zoffs = SUM_TERN(HAS_HOTEND_OFFSET, -offset.z, hotend_offset[active_extruder].z);
 
-  auto try_to_probe = [&](PGM_P const plbl, const_float_t z_probe_low_point, const feedRate_t fr_mm_s, const bool scheck, const float clearance) -> bool {
-    if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("try_to_probe(..., ", z_probe_low_point, ", ", fr_mm_s, ", ", scheck, ", ", clearance);
+  // Stop the probe before it goes too low to prevent damage.
+  // If Z isn't known then probe to -10mm.
+  const float z_probe_low_point = axis_is_trusted(Z_AXIS) ? zoffs + Z_PROBE_LOW_POINT : -10.0f;
 
+  if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Probe Low Point: ", z_probe_low_point);
+
+  // returns true on failure
+  auto try_to_probe = [&](PGM_P const plbl, const feedRate_t fr_mm_s, const float clearance) -> bool {
+    if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("try_to_probe(..., ", fr_mm_s, ", ", clearance);
     // Tare the probe, if supported
     if (TERN0(PROBE_TARE, tare())) return true;
 
-    // Do a first probe at the fast speed
-    const bool probe_fail = probe_down_to_z(z_probe_low_point, fr_mm_s),          // No probe trigger?
-               early_fail = (scheck && current_position.z > zoffs + clearance);   // Probe triggered too high?
+    // Run probe, true if probe failed to trigger.
+    const bool probe_fail = probe_down_to_z(z_probe_low_point, fr_mm_s);
+    // Probe triggered too high?  This assumes is probing the bed (not
+    // measuring something higher) and the probe starts high and triggers
+    // well before it gets close to the bed.  This is less useful when close
+    // to the bed.
+    // do_z_raise() is current_position.z + (clearance + zoffs)
+    // Z before raise could be as low as zoffs after it triggered.
+    // Since clearance is defined have have the offset added on.  This is why
+    // zoffs appears twice.  When using high_speed_mode where the probe stays
+    // deployed, the 2nd and on, the pin doesn't need to be lifted (much) off
+    // the bed sine it isn't moving in X/Y and Z_CLEARANCE_MULTI_PROBE can be
+    // negative but less than the offset.  It just needs to be high enough
+    // to stop triggering.
+    const bool early_fail = (sanity_check && current_position.z >
+      zoffs + (clearance + zoffs));
     #if ENABLED(DEBUG_LEVELING_FEATURE)
       if (DEBUGGING(LEVELING) && (probe_fail || early_fail)) {
         DEBUG_ECHOPGM_P(plbl);
@@ -749,12 +768,6 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
     return probe_fail || early_fail;
   };
 
-  // Stop the probe before it goes too low to prevent damage.
-  // If Z isn't known then probe to -10mm.
-  const float z_probe_low_point = axis_is_trusted(Z_AXIS) ? zoffs + Z_PROBE_LOW_POINT : -10.0f;
-
-  if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Probe Low Point: ", z_probe_low_point);
-
   // Double-probing does a fast probe followed by a slow probe
   #if TOTAL_PROBING == 2
 
@@ -763,8 +776,8 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
 
     // Do a first probe at the fast speed
     if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Fast Probe:");
-    if (try_to_probe(PSTR("FAST"), z_probe_low_point, z_probe_fast_mm_s,
-                     sanity_check, Z_CLEARANCE_BETWEEN_PROBES) ) return NAN;
+    if (try_to_probe(PSTR("FAST"), z_probe_fast_mm_s,
+                     Z_CLEARANCE_BETWEEN_PROBES) ) return NAN;
 
     const float z1 = DIFF_TERN(HAS_DELTA_SENSORLESS_PROBING, current_position.z, largest_sensorless_adj);
     if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("1st Probe Z:", z1);
@@ -804,8 +817,8 @@ float Probe::run_z_probe(const bool sanity_check/*=true*/) {
 
       // Probe downward slowly to find the bed
       if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Slow Probe:");
-      if (try_to_probe(PSTR("SLOW"), z_probe_low_point, MMM_TO_MMS(Z_PROBE_FEEDRATE_SLOW),
-                       sanity_check, Z_CLEARANCE_MULTI_PROBE) ) return NAN;
+      if (try_to_probe(PSTR("SLOW"), MMM_TO_MMS(Z_PROBE_FEEDRATE_SLOW),
+                       Z_CLEARANCE_MULTI_PROBE) ) return NAN;
 
       TERN_(MEASURE_BACKLASH_WHEN_PROBING, backlash.measure_with_probe());
 
