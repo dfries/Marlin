@@ -360,10 +360,11 @@ float Probe::offset_z_raise(const float z_raise) {
 /**
  * Raise Z to a minimum height to make room for a probe to move
  */
-void Probe::do_z_raise(const float z_raise) {
+void Probe::do_z_raise(const float z_raise, const_float_t raise_from) {
   if (DEBUGGING(LEVELING)) DEBUG_ECHOLNPGM("Probe::do_z_raise(", z_raise, ")");
   // raise, probe offset + z_raise from the current position
-  do_z_clearance(current_position.z + offset_z_raise(z_raise));
+  do_z_clearance((isnan(raise_from) ? current_position.z : raise_from)
+    + offset_z_raise(z_raise));
 }
 
 FORCE_INLINE void probe_specific_action(const bool deploy) {
@@ -511,7 +512,8 @@ void Probe::probe_error_stop() {
  *
  * Return TRUE if the probe could not be deployed/stowed
  */
-bool Probe::set_deployed(const bool deploy, const bool no_return/*=false*/) {
+bool Probe::set_deployed(const bool deploy, const bool no_return/*=false*/,
+  const_float_t raise_from/* = NAN*/) {
   if (DEBUGGING(LEVELING)) {
     DEBUG_POS("Probe::set_deployed", current_position);
     DEBUG_ECHOLNPGM("deploy=", deploy, " no_return=", no_return);
@@ -529,7 +531,8 @@ bool Probe::set_deployed(const bool deploy, const bool no_return/*=false*/) {
   #endif
 
   if (z_raise_wanted)
-    do_z_raise(_MAX(Z_CLEARANCE_BETWEEN_PROBES, Z_CLEARANCE_DEPLOY_PROBE));
+    do_z_raise(_MAX(Z_CLEARANCE_BETWEEN_PROBES, Z_CLEARANCE_DEPLOY_PROBE),
+      raise_from);
 
   #if EITHER(Z_PROBE_SLED, Z_PROBE_ALLEN_KEY)
     if (homing_needed_error(TERN_(Z_PROBE_SLED, _BV(X_AXIS)))) {
@@ -926,7 +929,8 @@ float Probe::probe_at_point(const_float_t rx, const_float_t ry, const ProbePtRai
   }
 
   // Use a safe Z height for the XY move
-  const float safe_z = current_position.z +
+  const float starting_z = current_position.z;
+  const float safe_z = starting_z +
     offset_z_raise(Z_CLEARANCE_BETWEEN_PROBES);
 
   // On delta keep Z below clip height or do_blocking_move_to will abort
@@ -987,7 +991,7 @@ float Probe::probe_at_point(const_float_t rx, const_float_t ry, const ProbePtRai
   #endif
 
   float measured_z = NAN;
-  if (!deploy()) {
+  if (!deploy(false, starting_z)) {
     measured_z = run_z_probe(sanity_check) + offset.z;
     TERN_(HAS_PTC, ptc.apply_compensation(measured_z));
     TERN_(X_AXIS_TWIST_COMPENSATION, measured_z += xatc.compensation(npos + offset_xy));
