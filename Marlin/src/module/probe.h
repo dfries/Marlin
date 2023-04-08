@@ -92,7 +92,8 @@ public:
 
     static void probe_error_stop();
 
-    static bool set_deployed(const bool deploy, const bool no_return=false);
+    static bool set_deployed(const bool deploy, const bool no_return=false,
+      const_float_t raise_from = NAN);
 
     #if IS_KINEMATIC
 
@@ -184,7 +185,8 @@ public:
 
     static constexpr xyz_pos_t offset = xyz_pos_t(NUM_AXIS_ARRAY_1(0)); // See #16767
 
-    static bool set_deployed(const bool, const bool=false) { return false; }
+    static bool set_deployed(const bool, const bool=false,
+      const_float_t raise_from = NAN) { return false; }
 
     static bool can_reach(const_float_t rx, const_float_t ry, const bool=true) { return position_is_reachable(rx, ry); }
 
@@ -220,7 +222,11 @@ public:
     static constexpr xy_pos_t offset_xy = xy_pos_t({ 0, 0 });   // See #16767
   #endif
 
-  static bool deploy(const bool no_return=false) { return set_deployed(true, no_return); }
+  // Deploy the probe, by default will return to the starting XY (for probes
+  // that require movement), if a raise is needed, will raise from
+  // current_position.z, raise_from if not NAN.
+  static bool deploy(const bool no_return=false, const_float_t raise_from = NAN)
+  { return set_deployed(true, no_return, raise_from); }
   static bool stow(const bool no_return=false)   { return set_deployed(false, no_return); }
 
   #if HAS_BED_PROBE || HAS_LEVELING
@@ -352,7 +358,7 @@ private:
   // add probe & hotend offset to z_raise and return the new value
   static float offset_z_raise(const float z_raise);
   // raise from current Z by probe & hotend offset + z_raise
-  static void do_z_raise(const float z_raise);
+  static void do_z_raise(const float z_raise, const_float_t raise_from = NAN);
   static float run_z_probe(const bool sanity_check=true);
 };
 
